@@ -1,6 +1,11 @@
-package ru.ifmo.android_2015.lesson_8.ok;
+package ru.ifmo.android_2015.lesson_8.vk;
 
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
+import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
@@ -9,28 +14,31 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import ru.ifmo.android_2015.lesson_8.ApiException;
+import com.vk.sdk.VKAccessToken;
+import com.vk.sdk.VKCallback;
+import com.vk.sdk.VKSdk;
+import com.vk.sdk.api.VKError;
+import com.vk.sdk.api.VKParameters;
+import com.vk.sdk.api.VKRequest;
+import com.vk.sdk.api.model.VKScopes;
+
+import ru.ifmo.android_2015.lesson_8.AsyncTaskState;
 import ru.ifmo.android_2015.lesson_8.DownloadImageTask;
 import ru.ifmo.android_2015.lesson_8.R;
-import ru.ifmo.android_2015.lesson_8.AsyncTaskState;
-import ru.ifmo.android_2015.lesson_8.common.WebViewUtils;
-import ru.ifmo.android_2015.lesson_8.ok.api.OkApi;
-import ru.ifmo.android_2015.lesson_8.ok.api.OkConstants;
-import ru.ifmo.android_2015.lesson_8.ok.api.Session;
-import ru.ifmo.android_2015.lesson_8.ok.api.SessionStore;
 import ru.ifmo.android_2015.lesson_8.common.CurrentUser;
-import ru.ifmo.android_2015.lesson_8.ok.api.user.OkCurrentUserParser;
+import ru.ifmo.android_2015.lesson_8.common.WebViewUtils;
+import ru.ifmo.android_2015.lesson_8.ok.api.SessionStore;
 
 /**
- * Created by dmitry.trunin on 30.11.2015.
+ * Created by dmitry.trunin on 01.12.2015.
  */
-public class OkDemoActivity extends OkBaseActivity {
+public class VkDemoActivity extends Activity {
 
     static class NonConfigurationState {
-        final OkApiRequestTask<CurrentUser> currentUserTask;
+        final VkApiRequestTask<CurrentUser> currentUserTask;
         final DownloadImageTask downloadImageTask;
 
-        public NonConfigurationState(OkApiRequestTask<CurrentUser> currentUserTask,
+        public NonConfigurationState(VkApiRequestTask<CurrentUser> currentUserTask,
                                      DownloadImageTask downloadImageTask) {
             this.currentUserTask = currentUserTask;
             this.downloadImageTask = downloadImageTask;
@@ -42,11 +50,27 @@ public class OkDemoActivity extends OkBaseActivity {
     private ProgressBar progressView;
     private Button logoutButton;
 
-
-    OkApiRequestTask<CurrentUser> currentUserTask;
+    VkApiRequestTask<CurrentUser> currentUserTask;
     DownloadImageTask downloadImageTask;
 
+    private static final String KEY_TOKEN = "vk_token";
+
     @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        initContentView();
+
+        VKAccessToken token = VKAccessToken.tokenFromSharedPreferences(this, KEY_TOKEN);
+        if (token != null) {
+            Log.d(TAG, "onCreate: using saved token");
+            onLoggedIn(token);
+        } else if (savedInstanceState == null) {
+            Log.d(TAG, "onCreate: token is missing, performing login...");
+            VKSdk.login(this, VKScopes.STATS);
+        }
+    }
+
     protected void initContentView() {
         setContentView(R.layout.activity_ok_demo);
         nameView = (TextView) findViewById(R.id.user_name);
@@ -63,9 +87,30 @@ public class OkDemoActivity extends OkBaseActivity {
         imageView.setImageBitmap(null);
     }
 
-    @Override
-    protected void onLoggedIn(Session session, boolean allowStateLoss) {
+
+    protected void onLoggedIn(VKAccessToken token) {
+        Log.d(TAG, "onLoggedIn: " + token);
         startCurrentUserRequest();
+    }
+
+    protected void onLoginFailed(VKError error) {
+        Log.w(TAG, "onLoginFailed: " + error);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        VKSdk.onActivityResult(requestCode, resultCode, data, new VKCallback<VKAccessToken>() {
+            @Override
+            public void onResult(VKAccessToken token) {
+                token.saveTokenToSharedPreferences(VkDemoActivity.this, KEY_TOKEN);
+                onLoggedIn(token);
+            }
+
+            @Override
+            public void onError(VKError error) {
+                onLoginFailed(error);
+            }
+        });
     }
 
     void onCurrentUser(CurrentUser currentUser) {
@@ -78,9 +123,9 @@ public class OkDemoActivity extends OkBaseActivity {
         }
     }
 
-    void onCurrentUserError(ApiException error) {
+    void onCurrentUserError(VKError error) {
         Log.w(TAG, "onCurrentUserError: " + error);
-        String errorMessage = error == null ? getString(R.string.error) : error.getMessage();
+        String errorMessage = error == null ? getString(R.string.error) : error.toString();
         nameView.setText(errorMessage);
     }
 
@@ -104,7 +149,6 @@ public class OkDemoActivity extends OkBaseActivity {
         return new NonConfigurationState(currentUserTask, downloadImageTask);
     }
 
-
     @SuppressWarnings("unchecked,deprecation")
     void startCurrentUserRequest() {
         if (currentUserTask == null) {
@@ -112,19 +156,21 @@ public class OkDemoActivity extends OkBaseActivity {
             currentUserTask = state == null ? null : state.currentUserTask;
         }
         if (currentUserTask == null) {
-            currentUserTask = new OkApiRequestTask<>(this, currentUserListner,
-                    new OkCurrentUserParser());
-            currentUserTask.execute(
-                    OkApi.User.CurrentUser.createRequest(OkConstants.APP_PUBLIC_KEY));
+            final VKRequest request = new VKRequest("users.get", VKParameters.from(
+                    "fields", "photo_max,first_name,last_name"
+            ));
+            currentUserTask = new VkApiRequestTask<>(this, currentUserListener,
+                    new VkCurrentUserParser());
+            currentUserTask.execute(request);
         } else {
-            currentUserTask.attach(this, currentUserListner);
+            currentUserTask.attach(this, currentUserListener);
             if (currentUserTask.getState() == AsyncTaskState.DONE) {
                 final CurrentUser currentUser = currentUserTask.getResult();
                 if (currentUser != null) {
                     onCurrentUser(currentUser);
                 }
             } else if (currentUserTask.getState() == AsyncTaskState.ERROR) {
-                onCurrentUserError(currentUserTask.getApiException());
+                onCurrentUserError(currentUserTask.getError());
             }
         }
     }
@@ -147,16 +193,16 @@ public class OkDemoActivity extends OkBaseActivity {
         }
     }
 
-    private OkApiRequestTask.ResultListener<CurrentUser> currentUserListner =
-            new OkApiRequestTask.ResultListener<CurrentUser>() {
+    private final VkApiRequestTask.ResultListener<CurrentUser> currentUserListener =
+            new VkApiRequestTask.ResultListener<CurrentUser>() {
         @Override
-        public void onResultReceived(CurrentUser okCurrentUser) {
-            onCurrentUser(okCurrentUser);
+        public void onResultReceived(CurrentUser currentUser) {
+            onCurrentUser(currentUser);
         }
 
         @Override
-        public void onError(ApiException apiException) {
-            onCurrentUserError(apiException);
+        public void onError(VKError error) {
+            onCurrentUserError(error);
         }
     };
 
@@ -176,13 +222,16 @@ public class OkDemoActivity extends OkBaseActivity {
     private View.OnClickListener logoutClickListener = new View.OnClickListener() {
         @Override
         public void onClick(View v) {
-            // Удаляем сесиию из нашего хранилища
-            SessionStore.getInstance().updateKeys(OkDemoActivity.this, null, null);
+            final Context context = VkDemoActivity.this;
+
+            // Выполняем логаут в Vk SDK
+            VKSdk.logout();
+
+            // Удаляем сохраненный токен
+            VKAccessToken.removeTokenAtKey(context, KEY_TOKEN);
+
             // Очищаем вьюшки
             resetView();
-
-            // Чистим куки в WebView, чтобы OAuth не подумал, что мы уже залогинились
-            WebViewUtils.clearCookies(OkDemoActivity.this);
 
             // Отменяем загрузки для текущего пользователя
             if (currentUserTask != null) {
@@ -195,10 +244,10 @@ public class OkDemoActivity extends OkBaseActivity {
             }
 
             // Выкидываем пользователя на логин
-            startLogin();
-
+            VKSdk.login(VkDemoActivity.this);
         }
     };
 
-    private static final String TAG = "OkDemoActivity";
+
+    protected final String TAG = getClass().getSimpleName();
 }

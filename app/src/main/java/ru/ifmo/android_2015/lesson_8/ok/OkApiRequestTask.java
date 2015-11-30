@@ -154,7 +154,7 @@ public class OkApiRequestTask<TResult> extends AsyncTask<OkApiRequest, Void, TRe
     @Override
     protected void onPostExecute(TResult result) {
         if (isCancelled()) {
-            return;
+
         }
         if (state != AsyncTaskState.DONE && state != AsyncTaskState.ERROR) {
             // doInBackground должен обязательно завершиться DONE или ERROR

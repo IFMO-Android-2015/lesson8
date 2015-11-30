@@ -2,4 +2,6 @@
     <string name="app_name">Lesson 8</string>
     <string name="logout">Выйти</string>
     <string name="error">Ошибка</string>
+    <string name="ok_demo">OK Demo</string>
+    <string name="vk_demo">VK Demo</string>
 </resources>

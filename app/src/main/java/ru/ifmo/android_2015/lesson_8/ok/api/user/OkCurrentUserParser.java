@@ -5,13 +5,14 @@ import android.util.JsonReader;
 
 import java.io.IOException;
 
+import ru.ifmo.android_2015.lesson_8.common.CurrentUser;
 import ru.ifmo.android_2015.lesson_8.ok.OkApiResultParser;
 import ru.ifmo.android_2015.lesson_8.ok.api.OkApi;
 
 /**
  * Created by dmitry.trunin on 30.11.2015.
  */
-public class OkCurrentUserParser extends OkApiResultParser<OkCurrentUser> {
+public class OkCurrentUserParser extends OkApiResultParser<CurrentUser> {
 
     private String bigPicUrl;
     private String userName;
@@ -27,7 +28,7 @@ public class OkCurrentUserParser extends OkApiResultParser<OkCurrentUser> {
 
     @NonNull
     @Override
-    protected OkCurrentUser createResult() throws IOException {
-        return new OkCurrentUser(bigPicUrl, userName);
+    protected CurrentUser createResult() throws IOException {
+        return new CurrentUser(bigPicUrl, userName);
     }
 }
